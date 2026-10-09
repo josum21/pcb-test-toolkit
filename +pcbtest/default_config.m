@@ -31,18 +31,20 @@ function cfg = default_config(tower)
             'No display mapping for tower %d. Add it to default_config.m.', tower);
     end
 
-    % These are the three scope modes in the historical cross-talk script.
+    % Apply the historical three readout presets to scope CH2.
     cfg.scope.signal = struct('position', -4, 'range', 5, 'offset', -1.8);
     cfg.scope.adjacent = struct('position', 0, 'range', 0.15, 'offset', 0.009);
     cfg.scope.other = struct('position', 0, 'range', 0.08, 'offset', 0.009);
-    cfg.scope.channel = 1;
+    cfg.scope.referenceChannel = 1; % Direct generator signal; left unchanged.
+    cfg.scope.readoutChannel = 2;   % Multiplexer readout waveform.
+    cfg.scope.readDelaySeconds = 1;
 
     cfg.hardware.matrixResource = '';
     cfg.hardware.scopeResource = '';
     cfg.hardware.matrixIdContains = '';
     cfg.hardware.scopeIdContains = '';
     cfg.hardware.settleSeconds = 0;
-    cfg.hardware.overwrite = false;
+    cfg.hardware.skipExistingFiles = true;
 
     % Capacity settings reproduce the legacy RC fit and C = delta(tau)/R.
     cfg.capacity.source = 'waveforms';

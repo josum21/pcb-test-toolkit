@@ -2,11 +2,11 @@
 toolkitDir = fileparts(mfilename('fullpath'));
 addpath(toolkitDir);
 
-towers = [6, 13];
-dataDir = fullfile(toolkitDir, '..', '2602CHINAPCB_Capac');
+towers = [4];
+dataDir = fullfile(toolkitDir, 'data', 'capacity_run_001');
 datasetLabel = 'PCBCHINA';
 outputLabel = 'PCBCHINA';       % Results: output/<outputLabel>/capacity/.
-towerSubfolders = false;        % Set true for new Windows toolkit data.
+towerSubfolders = true;         % Requires both T0 and measurement tower folders.
 
 referenceTauSeconds = [];
 for tower = towers

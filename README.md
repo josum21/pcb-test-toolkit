@@ -6,68 +6,81 @@ This toolkit separates waveform acquisition on the Windows instrument PC from cr
 
 | Task | Computer | Start with |
 | --- | --- | --- |
-| Acquire cross-talk waveforms | Windows instrument PC | `run_windows_xtalk.m` |
-| Acquire one capacity waveform per channel | Windows instrument PC | `run_windows_capacity.m` |
+| Acquire cross-talk waveforms | Windows instrument PC | `run_acquire_xtalk.m` |
+| Acquire one capacity waveform per channel | Windows instrument PC | `run_acquire_capacity.m` |
+| Inspect one injection/readout pair on the scope | Windows instrument PC | `run_acquire_debug.m` |
 | Analyze cross-talk tower lists | Offline MATLAB computer, including the Mac | `run_offline_xtalk.m` |
 | Analyze capacity tower lists relative to T0 | Offline MATLAB computer, including the Mac | `run_offline_capacity.m` |
 
 Each entry script adds the toolkit folder to the MATLAB path for the current session. It does not change the saved MATLAB path. Acquisition uses Instrument Control Toolbox and a working VISA connection. Offline cross-talk analysis uses Control System Toolbox; its study plots also use Signal Processing Toolbox. Capacity waveform fitting uses Optimization Toolbox.
 
+On the acquisition oscilloscope, CH1 carries the direct generator reference and stays at the settings chosen on the scope. CH2 carries the multiplexer readout. The Windows scripts adjust and read CH2 only. Set the scope's trigger source and CH1 display on the instrument before acquisition.
+
 To call a `pcbtest` function directly from the MATLAB Command Window, first add the toolkit folder with `addpath('path/to/pcb_test_toolkit')`. The entry scripts do this automatically.
 
 ## Script-by-script guide
 
-### `run_windows_xtalk.m` — acquire cross-talk
+### `run_acquire_xtalk.m` — acquire cross-talk
 
-**Purpose:** Loop over selected towers. For each tower, acquire the 15 x 15 injection/readout matrix by switching the multiplexer before every waveform.
-
-**Before running:**
-
-1. In MATLAB, run `visadevlist`. Copy the matrix and oscilloscope **resource names** into `matrixResource` and `scopeResource` at the top of this script. The list's row numbers can change, so do not use them as device identifiers.
-2. Set `towers` to the acquisition order, `dataRoot` to a new directory for this cross-talk campaign, and `datasetLabel` to the text used in filenames. Use a new `dataRoot` when taking another dataset.
-3. Check `cfg.scope.signal`, `cfg.scope.adjacent`, and `cfg.scope.other` in `+pcbtest/default_config.m`. Check the channel routing in `+pcbtest/set_matrix_channel.m` against the actual multiplexer wiring.
-4. Optionally set `matrixIdContains` and `scopeIdContains` to text expected in the devices' `*IDN?` responses.
-5. For a short trial, change `cfg.channels` inside the loop to `1:2` and use a separate trial `dataRoot`. For a full run, use `1:15`.
-6. Run `run_windows_xtalk.m`. At each tower prompt, prepare that tower's physical connection and press Enter. Type `q` to stop before the tower.
-
-**Output:** `dataRoot/T13/T13_xtalk_PCBCERN_01-02.mat` is an example. Each file contains `t`, `data`, and `metadata`; a full tower produces 225 files. Existing pair files are skipped only when metadata matches the current pair, tower, scope settings, and instrument identities.
-
-### `run_windows_capacity.m` — acquire capacity waveforms
-
-**Purpose:** Loop over T0 and the selected towers. For each tower, acquire one rising waveform for each channel with injection and readout routed to the same channel. Tau fitting happens offline.
+**Purpose:** Acquire one physically connected tower per run. The multiplexer switches injection and readout channels within that tower to capture the complete 15 x 15 matrix (225 waveforms). It cannot switch towers.
 
 **Before running:**
 
-1. Set the same two VISA resource names as for cross-talk. Set `towers` with T0 first, for example `[0, 6, 13]`.
-2. Set a new capacity `dataRoot` and `datasetLabel`. Check `cfg.capacity.scope` and `cfg.capacity.settleSeconds` in `+pcbtest/default_config.m`.
-3. Run `run_windows_capacity.m`. Prepare the indicated tower at each prompt and press Enter. The script acquires each of its 15 channels once.
+1. In MATLAB, run `visadevlist` and check the example `matrixResource` and `scopeResource` values against the connected instruments. These values came from the tested T4 setup and may differ on another PC. The list's row numbers can change, so use resource names rather than row numbers.
+2. The example uses `tower = 4`, `datasetLabel = 'PCBCHINA'`, and `dataRoot = fullfile(toolkitDir, 'data', 'xtalk_run_003')`. Set `tower` to the tower currently connected and choose a new `dataRoot` for another campaign.
+3. Set the CH2 `scopeSignalRange`, `scopeAdjacentRange`, and `scopeOtherRange` values at the top of the script. The matching `scopeSignalPosition`, `scopeAdjacentPosition`, `scopeOtherPosition`, and three `scope...Offset` values are editable there too. The script selects one complete setting for every injection/readout pair. To keep one range for all pairs, set all three range values to the same number. The tested T4 example waits `readDelaySeconds = 0.5` seconds between completed acquisition and waveform readout. Check the channel routing in `+pcbtest/set_matrix_channel.m` against the actual multiplexer wiring.
+4. Optionally set `matrixIdContains` and `scopeIdContains` to text expected in the devices' `*IDN?` responses. Set `skipExistingFiles = true` to skip existing files with matching metadata; set it to `false` to reacquire and overwrite them.
+5. For a short trial, change `cfg.channels` to `1:2` and use a separate trial `dataRoot`. For a full run, use `1:15`.
+6. Physically connect the selected tower and run `run_acquire_xtalk.m`. Confirm the connection at the prompt to start its 225 waveforms, or type `q` to stop.
+7. To measure another tower, change the physical connection, update `tower`, and run the script again.
 
-**Output:** `dataRoot/T13/T13_Capacity_PCBCERN_1.mat` is an example. Each file contains `t`, `data_read`, and `metadata`; a full tower produces 15 files.
+**Output:** `dataRoot/T4/T4_xtalk_PCBCHINA_01-02.mat` is an example. Each file contains `t`, CH2 `data`, and `metadata`; a full tower produces 225 files. With `skipExistingFiles = true`, existing pair files are skipped only when metadata matches the current pair, tower, readout scope channel, scope settings, and instrument identities. A mismatch stops acquisition with an error. The tested T4 example has `skipExistingFiles = false`, so rerunning it reacquires and overwrites existing pair files. After changing any CH2 setting for an existing dataset, use a new `dataRoot` or keep that switch false to reacquire its files.
+
+### `run_acquire_capacity.m` — acquire capacity waveforms
+
+**Purpose:** Acquire one physically connected tower per run. The multiplexer routes injection and readout to each of its 15 channels in turn, producing one rising waveform per channel. Tau fitting happens offline.
+
+**Before running:**
+
+1. Check the example VISA resource names against `visadevlist`. Set `tower = 0` and connect T0 for the reference acquisition first.
+2. The example uses `dataRoot = fullfile(toolkitDir, 'data', 'capacity_run_001')` and `datasetLabel = 'PCBCHINA'`. Set `scopeRange` at the top of the script to the desired CH2 `CHANnel:RANGe` command value for all 15 channels. Position, offset, and pre-acquisition settle time come from `cfg.capacity.scope` and `cfg.capacity.settleSeconds` in `+pcbtest/default_config.m`. `readDelaySeconds` adds a 1-second wait after completed acquisition before CH2 readout. Set `skipExistingFiles = true` to skip existing files with matching metadata; set it to `false` to reacquire and overwrite them.
+3. Run `run_acquire_capacity.m` and confirm the T0 connection at the prompt. The script acquires its 15 channels once.
+4. To measure another tower, change the physical connection, set `tower` to its number, and run the script again. Keep the same `dataRoot` and `datasetLabel` so offline analysis can find both that tower and T0.
+
+**Output:** `dataRoot/T4/T4_Capacity_PCBCHINA_1.mat` is an example. Each file contains `t`, CH2 `data_read`, and `metadata`; a full tower produces 15 files. With `skipExistingFiles = true`, existing channel files are skipped only when metadata matches; a mismatch stops acquisition with an error. After changing the range for an existing dataset, use a new `dataRoot` or set `skipExistingFiles = false` to reacquire and overwrite its files.
+
+### `run_acquire_debug.m` — inspect one waveform
+
+**Purpose:** Route one chosen injection/readout pair and trigger exactly one scope acquisition for inspection. Saving is controlled by `saveWaveform`, which defaults to `false`.
+
+**Before running:** The example uses T4, injection/readout channel 1, and the VISA resource names from the tested setup. Check `tower`, `injectChannel`, `readoutChannel`, `matrixResource`, and `scopeResource` before each run. `applyScopeSettings = true` by default, so the script sends `scopePosition`, `scopeRange`, and `scopeOffset` to CH2 once before acquisition. Set it to `false` to keep the CH2 vertical settings adjusted on the scope front panel; in that mode, the three numeric script values are ignored. CH1 remains the direct reference. `scopeRange` is the direct `CHANnel:RANGe` command value; consult the scope's command reference when translating a front-panel V/div value. Adjust `readoutScopeChannel` and `settleSeconds` if needed; `readDelaySeconds` defaults to 1 second after acquisition.
+
+**How to use:** Connect the selected tower, set the desired channels in `run_acquire_debug.m`, and run `run_acquire_debug` in MATLAB. Acquisition starts immediately, with no confirmation prompt. Inspect the captured waveform on the scope. Set `saveWaveform = true` before running if you want a MAT file; leave it `false` to inspect without saving. Edit the channels and run the script again for another pair or after changing the scope settings. To compare with the xtalk acquisition, use the same injection/readout pair and match CH2 position, range, and offset; xtalk selects different settings for diagonal, adjacent, and other pairs. It does not perform a channel loop.
+
+**Output:** Saved waveforms go to `output/debug/T<number>` by default with a timestamped name such as `T13_debug_03-09_20261008_153000_123.mat`. Each file contains `t`, CH2 `data`, and `metadata`. The debug files use their own filenames and are not selected by the offline matrix or capacity analyzers.
 
 ### `run_offline_xtalk.m` — analyze cross-talk
 
-**Purpose:** Loop over cross-talk towers and run `pcbtest.analyze_xtalk` for each matrix. The initial settings point to the historical `2602CHINAPCB` folder.
+**Purpose:** Loop over cross-talk towers and run `pcbtest.analyze_xtalk` for each matrix. The example settings expect T4 data under `data/xtalk_run_001/T4`.
 
-**Before running:** Set `towers`, `dataDir`, `datasetLabel`, `outputLabel`, `shapingTimes` (seconds), and `studyCells` at the top of the script. `outputLabel` names a folder under `pcb_test_toolkit/output`; set it to a new name such as `'run_2026_10_02'` to keep another analysis separate. `studyCells` lists injection cell positions; the initial value is `[3, 8]`, and `[]` skips the two waveform study views. Historical data keeps all towers in one folder, so leave `towerSubfolders = false`. For data from `run_windows_xtalk.m`, set `dataDir` to its `dataRoot` and `towerSubfolders = true`. Then run `run_offline_xtalk.m`.
+**Before running:** Set `towers`, `dataDir`, `datasetLabel`, `outputLabel`, `shapingTimes` (seconds), and `studyCells` at the top of the script. Copy the Windows data folder to the offline computer or point `dataDir` to its location. `outputLabel` names a folder under `pcb_test_toolkit/output`; set it to a new name such as `'run_2026_10_02'` to keep another analysis separate. `studyCells` lists injection cell positions; the initial value is `[3, 8]`, and `[]` skips the two waveform study views. For Windows toolkit data, set `dataDir` to the acquisition `dataRoot` and keep `towerSubfolders = true`. For historical data with all towers in one folder, set `towerSubfolders = false`. Then run `run_offline_xtalk.m`.
 
 **Output for each tower and shaping time:**
 
 - `results_T13_20ns.mat`: matrices, normalization denominator, display-channel mapping, and summary values.
 - `pairs_T13_20ns.csv`: one row per injected/readout channel pair, with raw amplitudes and the globally normalized value.
-- `T13_xtalk_20ns_plot.pdf`: the legacy-style cross-talk heatmap, with the original turbo colors and fixed color range.
-- `T13_injection_xtalk_20ns_plot.pdf` and `T13_peak_xtalk_20ns_plot.pdf`: the other two legacy heatmap views.
-- `plots_ch/T13_xtalk_curves_20ns_ch3_b_plot.pdf`: all readout waveforms for one injection cell, shaped, high-pass filtered, normalized, and offset in time as in the first historical study figure.
+- `T13_xtalk_20ns_plot.pdf`: the legacy-style cross-talk heatmap. Each pair uses its own shaped waveform's maximum magnitude, divided by the largest maximum in the complete 15 x 15 matrix. It uses the original turbo colors and fixed color range.
+- `T13_peak_xtalk_20ns_plot.pdf`: the signal-peak amplitude map in volts. Each pair is sampled at the peak time of its injected channel's diagonal waveform, rather than using the pair's own maximum.
+- `plots_ch/T13_xtalk_curves_20ns_ch3_plot.pdf`: all readout waveforms for one injection cell, shaped, high-pass filtered, normalized, and offset in time as in the first historical study figure.
 - `plots_ch/T13_xtalk_curves_20ns_ch3_overlay_plot.pdf`: the second historical study figure, with all shaped readout waveforms overlaid without offsets or the extra high-pass filter. The channel number in each filename follows the cell-to-channel map.
-
-`heatmap_T13_20ns.pdf` is also refreshed as a copy of the main legacy-style plot for compatibility with the first toolkit version.
 
 Results go to `pcb_test_toolkit/output/<outputLabel>/xtalk/T<number>`. The toolkit's `.gitignore` excludes the entire `output/` folder. If an input file is missing, malformed, or has a different time axis, the analyzer stops and names the affected file.
 
 ### `run_offline_capacity.m` — analyze capacity
 
-**Purpose:** Loop over capacity towers, fit their raw waveforms and the T0 reference, then calculate per-channel capacitance. The T0 tau array is fitted once and reused. The initial settings point to the historical `2602CHINAPCB_Capac` folder.
+**Purpose:** Loop over capacity towers, fit their raw waveforms and the T0 reference, then calculate per-channel capacitance. The T0 tau array is fitted once and reused. The example settings expect `data/capacity_run_001/T0` and `data/capacity_run_001/T4`.
 
-**Before running:** Set `towers` (exclude T0, which is read as a reference), `dataDir`, `datasetLabel`, and `outputLabel`. Use the same `outputLabel` as the xtalk script to collect both analyses under one folder, or choose different names for separate runs. Historical data keeps all towers in one folder, so leave `towerSubfolders = false`. For data from `run_windows_capacity.m`, set `dataDir` to its `dataRoot` and `towerSubfolders = true`. Then run `run_offline_capacity.m`.
+**Before running:** Set `towers` (exclude T0, which is read as a reference), `dataDir`, `datasetLabel`, and `outputLabel`. Copy both T0 and measurement tower data to the offline computer or point `dataDir` to their common parent folder. Use the same `outputLabel` as the xtalk script to collect both analyses under one folder, or choose different names for separate runs. For Windows toolkit data, keep `towerSubfolders = true`. For historical data with all towers in one folder, set it to `false`. Then run `run_offline_capacity.m`.
 
 **Output for each tower:** `capacity_T13.mat` contains the fitted tau arrays, T0 tau array, capacitance in pF, component-fit coefficients, and display mapping; `capacity_T13.csv` gives one row per acquisition channel; `capacity_T13.pdf` shows the legacy-style capacity stairs plot in acquisition-channel order. `T13_capacity_fit.pdf` and `T13_capacity_fit.csv` show the line and coupling components in mapped cell order. Results go to `pcb_test_toolkit/output/<outputLabel>/capacity/T<number>`.
 
@@ -75,19 +88,27 @@ Results go to `pcb_test_toolkit/output/<outputLabel>/xtalk/T<number>`. The toolk
 
 **Purpose:** Return a configuration struct for the chosen tower. It contains the 15-channel display order, cross-talk shaping and baseline defaults, cross-talk and capacity scope settings, capacity fitting settings, and hardware connection fields. Tower 0 is supported as the capacity reference.
 
+**Scope scaling defaults:** For cross-talk, diagonal (signal) pairs use CH2 position `-4`, range `5`, and offset `-1.8`; adjacent channel numbers use CH2 position `0`, range `0.15`, and offset `0.009`; other pairs use CH2 position `0`, range `0.08`, and offset `0.009`. Capacity uses CH2 position `-4`, range `2`, and offset `0`. The xtalk entry script exposes all three settings for each pair category near the top and overrides these defaults for that run. The acquisition functions send the values directly as `CHANnel2:POSition`, `CHANnel2:RANGe`, and `CHANnel2:OFFset` SCPI commands; they do not calculate an automatic scale. CH1 is not configured or read by the scripts. After `SING` completes, the scripts wait `readDelaySeconds = 1` second before reading CH2. Check the oscilloscope's command reference before converting a front-panel V/div setting into a `RANGe` value.
+
 **How to use:** Call `cfg = pcbtest.default_config(13);` from an entry script, then override settings for that specific run. Supported tower groups and their display orders are defined in this file. For a tower outside these groups, add its channel mapping in this function before using it.
 
 ### `+pcbtest/acquire_xtalk.m` — instrument control and waveform saving
 
 **Purpose:** Connect to the configured VISA resources, identify the instruments, route each injected/readout pair through the multiplexer, set the scope range, trigger a single acquisition, and save the waveform.
 
-**How to use:** Normally called by `run_windows_xtalk.m` once per tower. For a custom driver script, create a configuration with `pcbtest.default_config`, fill in the hardware resources and output directory, then call `pcbtest.acquire_xtalk(cfg)`. The multiplexer commands are in `+pcbtest/set_matrix_channel.m`.
+**How to use:** Normally called by `run_acquire_xtalk.m` once per tower. For a custom driver script, create a configuration with `pcbtest.default_config`, fill in the hardware resources and output directory, then call `pcbtest.acquire_xtalk(cfg)`. The multiplexer commands are in `+pcbtest/set_matrix_channel.m`.
 
 ### `+pcbtest/acquire_capacity.m` — capture capacity waveforms
 
 **Purpose:** For each of 15 channels, route injection and readout to that channel, configure the scope, trigger one waveform, and save `t`, `data_read`, and metadata. The fitted tau is calculated later on the offline computer.
 
-**How to use:** Normally called by `run_windows_capacity.m` for each entry in `towers`, starting with T0. In a custom script, set `cfg.filePrefix` to a name such as `T13_Capacity_PCBCERN_`, then call `pcbtest.acquire_capacity(cfg)`.
+**How to use:** Normally called by `run_acquire_capacity.m` once for the connected tower. Acquire T0 in a separate run before the measurement towers. In a custom script, set `cfg.filePrefix` to a name such as `T13_Capacity_PCBCERN_`, then call `pcbtest.acquire_capacity(cfg)`.
+
+### `+pcbtest/acquire_debug.m` — single acquisition and optional save
+
+**Purpose:** Route the selected injection/readout pair, optionally apply scope settings, and capture one waveform. Save it when `cfg.debug.saveWaveform` is true.
+
+**How to use:** Called by `run_acquire_debug.m`. Configure the entry script and run it; the helper manages the instrument connections and stores a timestamped MAT file when `saveWaveform = true`.
 
 ### `+pcbtest/analyze_xtalk.m` — matrix calculation and exports
 
@@ -133,7 +154,7 @@ Results go to `pcb_test_toolkit/output/<outputLabel>/xtalk/T<number>`. The toolk
 
 ### `+pcbtest/read_scope.m` — read one scope channel
 
-**Purpose:** Read the scope's waveform header and ASCII sample values through the configured VISA connection, and return `t` in seconds and `data` in volts.
+**Purpose:** Read the selected scope channel's waveform header and ASCII sample values through the configured VISA connection, and return `t` in seconds and `data` in volts. The Windows acquisition scripts pass CH2 as the selected channel.
 
 **How to use:** Called by both acquisition functions after a single acquisition. The scope command strings are defined here if the oscilloscope model changes.
 

@@ -2,12 +2,12 @@
 toolkitDir = fileparts(mfilename('fullpath'));
 addpath(toolkitDir);
 
-towers = [13] % for loop e.g. [3, 4, 6, 10, 13];
-dataDir = fullfile(toolkitDir, '..', '2602CHINAPCB');
+towers = [4];                  % For multiple towers, use e.g. [3, 4, 6].
+dataDir = fullfile(toolkitDir, 'data', 'xtalk_run_001');
 datasetLabel = 'PCBCHINA';
 outputLabel = 'PCBCHINA';       % Results: output/<outputLabel>/xtalk/.
-towerSubfolders = false;        % Set true for new Windows toolkit data.
-shapingTimes = [20e-9, 50e-9];
+towerSubfolders = true;         % Windows acquisition saves each tower under T<number>.
+shapingTimes = [20e-9, 50e-9, 200e-9];
 studyCells = [3, 8];           % Set [] to skip the two waveform study views.
 
 for tower = towers
